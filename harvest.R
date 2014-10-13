@@ -31,7 +31,7 @@ if(!exists("since_ids"))
 # So can only have a request every 5 seconds.
 
 numIters = 1L
-while(numIters < 20L) {
+while(TRUE) {
     
  cur = Sys.time()
  for(id in logins) {
