@@ -25,7 +25,7 @@ function(curl, q, since_id = integer(), max_id = "",
               },
               GenericHTTPError = function(e) {
                      # need to catch rate limiting here.
-                  if(e$message %in% c("Too Many Requests\r\n", "Service Temporarily Unavailable\r\n")) {
+                  if(e$message %in% c("Too Many Requests\r\n")) {
                       if(e$message == "Too Many Requests\r\n") {
                          cat("Rate limited\n")
                          print(e)
