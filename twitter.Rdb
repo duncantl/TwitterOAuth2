@@ -265,8 +265,31 @@ This is implemented in <ulink url="twitterFuns2.R"/>.
 <title>Handling Too Many Requests</title>
 
 <para>
-There is on
+There is one last detail we must handle.
+If we make too many requests within a 15 minute window, we will get an
+error from our <https/> request. <r:func>getForm</r:func> simply raises an error.
+(We could intercept this at an earlier stage by using our own readfunction option in
+<r:func>getForm</r:func>, but it is not necessary.)
+Basically, we will get an error of class <r:class>GenericHTTPError</r:class>.
+This class allows us to catch this specific class of error using <r:func>tryCatch</r:func>.
+We do this with
+<r:code eval="false">
+ans = tryCatch(getForm(u, .params = args, curl = curl),
+              GenericHTTPError = function(e) {
 
+              })
+</r:code>
+When we get such an error (<r:arg>e</r:arg>), we can examine its message to determine the nature
+of the problem. The error also has the <http/> header from the response.
+For a rate-limiting error, this header includes information about when the window
+will expire and we can continue to send requests. We use this to wait
+the necessary period of time and then we re-issue the same request.
+Using the <r:func>tryCatch</r:func> mechanism and reissuing the request
+within the error handler allows us to continue.
+</para>
+<para>
+We also experienced <literal>"Service Temporarily Unavailable"</literal>
+errors. For this, we just wait a few seconds and reissue the request.
 </para>
 </section>
 

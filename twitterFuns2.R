@@ -22,11 +22,14 @@ function(curl, q, since_id = integer(), max_id = "",
               GenericHTTPError = function(e) {
                      # need to catch rate limiting here.
                   if(e$message %in% c("Too Many Requests\r\n", "Service Temporarily Unavailable\r\n")) {
-                      cat("Rate limited\n")
-                      print(e)
+                      if(e$message == "Too Many Requests\r\n") {
+                         cat("Rate limited\n")
+                         print(e)
                            # x-rate-limit-reset tells us when the window ends. So we sleep until then.
-                      dur = as.numeric(e$httpHeader["x-rate-limit-reset"]) - as.numeric(Sys.time()) + 1
-                      cat("Sleeping for", dur, "seconds\n")
+                          dur = as.numeric(e$httpHeader["x-rate-limit-reset"]) - as.numeric(Sys.time()) + 1
+                          cat("Sleeping for", dur, "seconds\n")
+                     } else
+                          dur = 30
                       Sys.sleep(dur)
                            # Now reissue the request.
                            # Can't reuse the same request as it has a nonce and also a timestamp.
