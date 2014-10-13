@@ -19,6 +19,10 @@ function(curl, q, since_id = integer(), max_id = "",
     
 
     ans = tryCatch(getForm(u, .params = args, curl = curl),
+              Service_Unavailable = function(e) {
+                    Sys.sleep(20)
+                    getForm(u, .params = args, curl = curl)       
+              },
               GenericHTTPError = function(e) {
                      # need to catch rate limiting here.
                   if(e$message %in% c("Too Many Requests\r\n", "Service Temporarily Unavailable\r\n")) {
@@ -28,12 +32,9 @@ function(curl, q, since_id = integer(), max_id = "",
                            # x-rate-limit-reset tells us when the window ends. So we sleep until then.
                           dur = as.numeric(e$httpHeader["x-rate-limit-reset"]) - as.numeric(Sys.time()) + 1
                           cat("Sleeping for", dur, "seconds\n")
-                     } else
+                      } else
                           dur = 30
                       Sys.sleep(dur)
-                           # Now reissue the request.
-                           # Can't reuse the same request as it has a nonce and also a timestamp.
-                           # So Remove the oauth elements in args and resign.
                       getForm(u, .params = args, curl = curl)       
                   } else
                       stop(e)
