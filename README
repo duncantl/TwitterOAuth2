@@ -1,0 +1,16 @@
+This is code written by Duncan Temple Lang to collect information
+from twitter. The idea is to collect data for the mid-term elections.
+We start with a collection twitter account names, e.g., @RepRonBarber.
+These are currently in "Arkansas.csv" (not actually a csv file)
+
+We loop over each identifier and search for tweets with this id as content.
+The searchTwitter() function does this.
+We then save the results in a directory Data/<id>/<num>.rda
+where <id> is replaced by the twitter id and <num> is the next
+file number in that directory.
+
+We then repeat this indefinitely.
+When we return to process an identifier, we need to limit
+our search to only include those tweets since the last search.
+See https://dev.twitter.com/rest/public/timelines
+

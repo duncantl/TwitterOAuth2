@@ -1,0 +1,253 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+<title>Searching for Tweets via the Twitter API using R</title><link rel="stylesheet" type="text/css" href="/Users/duncan/Classes/StatComputing/XDynDocs/inst/CSS/OmegaTech.css"></link><meta name="generator" content="DocBook XSL Stylesheets V1.76.1"></meta></head><body class="yui-skin-sam"><div class="article" title="Searching for Tweets via the Twitter API using R"><div class="titlepage"><div><div><h2 class="title"><a id="idp140333359036096"></a>Searching for Tweets via the Twitter API using <b xmlns:xd="http://www.xsldoc.org" xmlns="" class="proglang">R</b></h2></div><div><div class="author"><h3 class="author"><span class="firstname">Duncan</span> <span class="surname">Temple Lang</span></h3><div class="affiliation"><span class="orgname">University of California at Davis<br></br></span> <span class="orgdiv">Department of Statistics<br></br></span></div></div></div></div><hr></hr></div><div class="section" title="Functional Summary"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="idp140333359039584"></a>Functional Summary</h2></div></div></div><p>
+Here are the basic instructions to get this going.
+</p><p>
+Install the <i xmlns:r="http://www.r-project.org" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns:py="http://www.python.org" xmlns:perl="http://www.perl.org" xmlns:c="http://www.C.org" xmlns:vb="http://www.visualbasic.com" xmlns:omegahat="http://www.omegahat.org" xmlns:bioc="http://www.bioconductor.org" xmlns:java="http://www.java.com" xmlns:sql="http://www.sql.org" xmlns=""><a href="http://cran.r-project.org/web/packages/RCurl/index.html">RCurl</a></i> and <i xmlns:r="http://www.r-project.org" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns:py="http://www.python.org" xmlns:perl="http://www.perl.org" xmlns:c="http://www.C.org" xmlns:vb="http://www.visualbasic.com" xmlns:omegahat="http://www.omegahat.org" xmlns:bioc="http://www.bioconductor.org" xmlns:java="http://www.java.com" xmlns:sql="http://www.sql.org" xmlns=""><a href="http://cran.r-project.org/web/packages/RJSONIO/index.html">RJSONIO</a></i> packages.
+</p><p>
+Create a file named twitterCreds.R.
+This should have the contents
+</p><pre class="programlisting">
+twitterKey = "...."
+twitterSecret = "...."
+</pre><p>
+This file should not be readable by anybody on the machine except your account.
+</p><p>
+Create a directory named Data.
+</p><p>
+Run the code in harvest.R
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="idp140333359043568"><div><pre class="rcode" title="R code">
+source("harvest.R")
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+
+</p></div><div class="section" title="High-level Overview"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="idp140333359044240"></a>High-level Overview</h2></div></div></div><p>
+We want to search for tweets on a regular basis that contains a particular term (in this case, a twitter handle/login).
+The basic idea is quite simple.
+We use the Twitter API search/tweets (<a class="ulink" href="https://api.twitter.com/1.1/search/tweets.json" target="_top">https://api.twitter.com/1.1/search/tweets.json</a>) for this.
+There are several  aspects to consider - authentication and rate-limiting.
+These are somewhat related.
+</p><p>
+Twitter allows us to use OAuth1.1 and also Application-only OAuth2.
+OAuth1.1 is fine for accessing resources belonging to a twitter account, e.g., 
+tweeting, accessing the list of followers.
+Application-only authentication works better for our purposes as
+we are querying public resources, not those of a particular login/account.
+Application-only authentication has higher rate-limits, i.e. the number
+of requests we can issue in a given time period.
+For the search/tweets method, this is 450 rather than 180 every 15 minutes.
+</p><p>
+In addition to the higher rate-limit, OAuth2 is significantly simpler
+than OAuth1.1. Specifically, we don't have sign each request and manipulate the list
+of arguments to the request. 
+</p></div><div class="section" title="Authentication"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="idp140333359048272"></a>Authentication</h2></div></div></div><p>
+We'll use Application-only OAuth2 for the reasons we mentioned above.
+(Note that we also implemented OAuth1.1 in twitterFuns.R.)
+See <a class="ulink" href="https://dev.twitter.com/oauth/application-only" target="_top">https://dev.twitter.com/oauth/application-only</a> for a brief
+description of Application-only authentication on Twitter.
+There are two basic steps, as described there and in the OAuth2 specification:
+</p><div class="orderedlist"><ol class="orderedlist" type="1"><li class="listitem"><p>Use our consumer key and secret to get a Bearer token via a POST request to <a class="ulink" href="https://api.twitter.com/oauth2/token" target="_top">https://api.twitter.com/oauth2/token</a>.
+</p></li><li class="listitem"><p>
+Use this bearer token to make requests to the URL of the method we want, e.g.
+search/tweets.
+</p></li></ol></div><p>
+There are details for each of these.
+</p><div class="section" title="Getting the Bearer Token"><div class="titlepage"><div><div><h3 class="title"><a id="idp140333359052336"></a>Getting the Bearer Token</h3></div></div></div><p>
+To get the bearer token we will use in each API request, 
+we send a POST request to 
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="idp140333359053360"><div><pre class="rcode" title="R code">
+u = "https://api.twitter.com/oauth2/token"
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+The single parameter for the body of this request is
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="idp140333359053856"><div><pre class="rcode" title="R code">
+grant_type = "client_credentials"
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+Importantly, we pass the consumer key and secret in the header of the HTTP request.
+We do this as the string <code class="literal">"Basic &lt;str&gt;"</code> where <code class="literal">str</code>
+is the base64-encoded version of the string <code class="literal">"&lt;key&gt;:&lt;secret&gt;"</code>.
+So we can create the basic authorization string with
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="idp140333359055808"><div><pre class="rcode" title="R code">
+auth  = sprintf("%s:%s", twitterKey, twitterSecret)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+where the variables <b xmlns="" class="$" title="">twitterKey</b> and <b xmlns="" class="$" title="">twitterSecret</b>
+are strings containing our consumer key and secret.
+</p><p>
+We can now  make the request to get the bearer token with
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="idp140333359057600"><div><pre class="rcode" title="R code">
+library(RCurl)
+ans = postForm(u, grant_type = "client_credentials", style = "POST",
+               .opts = list('useragent' = 'R Twitter App',
+                             httpheader = c(Authorization = sprintf("Basic %s", base64Encode(auth)))))
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+Note that the key and secret  are hidden from everyone because of <b xmlns:xd="http://www.xsldoc.org" xmlns="" class="acronym" title="Secure HyperText Transfer Protocol">HTTPS</b> (Secure HyperText Transfer Protocol) (not base64-encoding).
+</p><p>
+We can get the bearer token from this <b xmlns:xd="http://www.xsldoc.org" xmlns="" class="acronym" title="JavaScript Object Notation"><b class="proglang">JSON</b></b> (JavaScript Object Notation) content with
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="idp140333359060560"><div><pre class="rcode" title="R code">
+library(RJSONIO)
+bearerToken = fromJSON(ans)["access_token"]
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+We can now use this in our requests.
+We should also note that until we invalidate/revoke this, it will be a valid
+token. So we can save it to a file and reuse it in different <b xmlns:xd="http://www.xsldoc.org" xmlns="" class="proglang">R</b> sessions.
+Note that it should be securely stored as it is like a password
+and so not to be shared with others. (Same as the consumer key and secret.)
+</p></div></div><div class="section" title="Using the Bearer Token"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="idp140333359062128"></a>Using the Bearer Token</h2></div></div></div><p>
+To use the bearer token, we include it in the
+<b xmlns:xd="http://www.xsldoc.org" xmlns="" class="acronym" title="Secure HyperText Transfer Protocol">HTTPS</b> (Secure HyperText Transfer Protocol) header of our request to the actual URL of the method we want to call.
+Since we will have to do this for each request and this part of the <b xmlns:xd="http://www.xsldoc.org" xmlns="" class="acronym" title="HyperText Transfer Protocol">HTTP</b> (HyperText Transfer Protocol)header will be the same
+for each, we'll create a curl handle object and add this <b xmlns:xd="http://www.xsldoc.org" xmlns="" class="acronym" title="HyperText Transfer Protocol">HTTP</b> (HyperText Transfer Protocol) header once:
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="idp140333359066064"><div><pre class="rcode" title="R code">
+con = getCurlHandle(httpheader = c(Authorization = sprintf("Bearer %s", bearerToken)))
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+</p><p>
+To call the search/tweets API method,  we use
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="idp140333359066976"><div><pre class="rcode" title="R code">
+searchURL = "https://api.twitter.com/1.1/search/tweets.json"
+tt = getForm(searchURL, q = "@RepMarthaRoby", curl = con)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+If we enabled the <i xmlns="" class="rarg">verbose</i> option in the curl handle, we would see
+something like
+</p><pre xmlns:r="http://www.r-project.org" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns:py="http://www.python.org" xmlns:perl="http://www.perl.org" xmlns:c="http://www.C.org" xmlns:vb="http://www.visualbasic.com" xmlns:omegahat="http://www.omegahat.org" xmlns:bioc="http://www.bioconductor.org" xmlns:java="http://www.java.com" xmlns:sql="http://www.sql.org" xmlns="" class="routput">
+GET /1.1/search/tweets.json?q=%40RepMarthaRoby HTTP/1.1
+Host: api.twitter.com
+Accept: */*
+Authorization: Bearer AAA....3Rn6nsx
+</pre>
+<p>
+This includes the bearer token in the Authorization header field.
+</p><p>
+The result of the <i xmlns:r="http://www.r-project.org" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns:py="http://www.python.org" xmlns:perl="http://www.perl.org" xmlns:c="http://www.C.org" xmlns:vb="http://www.visualbasic.com" xmlns:omegahat="http://www.omegahat.org" xmlns:bioc="http://www.bioconductor.org" xmlns:java="http://www.java.com" xmlns:sql="http://www.sql.org" xmlns="" class="rfunc">getForm()
+</i> is <b xmlns:xd="http://www.xsldoc.org" xmlns="" class="acronym" title="JavaScript Object Notation"><b class="proglang">JSON</b></b> (JavaScript Object Notation) content and we can get the tweets
+using 
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="idp140333359070256"><div><pre class="rcode" title="R code">
+tweets = fromJSON(tt)
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+This actually contains the list of tweets as one element and 
+metadata about the query in another:
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="idp140333359070784"><div><pre class="rcode" title="R code">
+names(tweets)
+<pre class="routput">
+[1] "statuses"        "search_metadata"
+</pre>
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+We'll see that the <i xmlns="" class="relement">search_metdata</i> is important.
+</p><p>
+We can add additional parameters to our <i xmlns:r="http://www.r-project.org" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns:py="http://www.python.org" xmlns:perl="http://www.perl.org" xmlns:c="http://www.C.org" xmlns:vb="http://www.visualbasic.com" xmlns:omegahat="http://www.omegahat.org" xmlns:bioc="http://www.bioconductor.org" xmlns:java="http://www.java.com" xmlns:sql="http://www.sql.org" xmlns="" class="rfunc">getForm()
+</i> query.
+The point here was to illustrate the use of the bearer token.
+</p></div><div class="section" title="Checking the Rate-Limit"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="idp140333359073232"></a>Checking the Rate-Limit</h2></div></div></div><p>
+Now that we have the bearer token, we can query the current status of our rate-limits
+at any moment in time. 
+We do this by calling the API method application/rate_limit_status, e.g.,
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="idp140333359074352"><div><pre class="rcode" title="R code">
+zz = getForm("https://api.twitter.com/1.1/application/rate_limit_status.json", resources = "search", curl = con)
+rl = fromJSON(zz)
+<pre class="routput">
+$rate_limit_context
+                application 
+"1EIti...............adlKi" 
+
+$resources
+$resources$search
+$resources$search$`/search/tweets`
+     limit  remaining      reset 
+       450        449 1413226593 
+</pre>
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+If we omit the <i xmlns="" class="rarg">resources</i> parameter, we get the rate-limits for all services.
+Alternatively, we can provide a comma-separated list of the services for which we want the limits.
+</p></div><div class="section" title="Getting All the Tweets from a Search"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="idp140333359076336"></a>Getting All the Tweets from a Search</h2></div></div></div><p>
+Like many APIs, when we make a request, we get back the n (e.g. 100)
+results.  If there are more than n, we have to return to get the next
+set of n, and so on.  This can be problematic in a fast-moving data
+source such as Twitter.  When we return, we have to make certain to
+get the next set in our result set, not new tweets and not any of the
+same ones from the previous set.  There is a reasonable description of
+cursoring at <a class="ulink" href="https://dev.twitter.com/rest/public/timelines" target="_top">https://dev.twitter.com/rest/public/timelines</a>.  Basically, we
+can ask for at most <code xmlns="" class="Sexpression">count = 100</code> results
+in any single "chunk" returned by a query. Suppose there are actually
+250 tweets matching this query.  We get back the first 100 in our
+initial request. Each of these tweets has an identifier (id).  More
+recent tweets have higher id values.  When we return for the second
+set of 100 tweets in our result set, we specify the
+<i xmlns="" class="rarg">max_id</i> parameter for our request and specify the
+smallest id value we have seen so far in this result set.  We can
+calculate this ourselves, or we can fetch it from the
+<i xmlns="" class="relement">search_metadata</i> field returned in each request, along
+with the list of tweets.  When we specify this, Twitter knows not to
+return any tweets with an id higher than this.  Hence, we don't get
+any of the tweets from the previous queries.
+</p><p>
+Given the description above,  our function
+to search for tweets needs to make potentially several queries -
+an initial query for the first 100 and then continues
+to make further requests specifying the <i xmlns="" class="rarg">max_id</i> 
+parameter to limit this request to the next 100 (or less) tweets in this result set.
+This is implemented in <a class="ulink" href="twitterFuns2.R" target="_top">twitterFuns2.R</a>.
+</p><div class="section" title="Handling Too Many Requests"><div class="titlepage"><div><div><h3 class="title"><a id="idp140333359082624"></a>Handling Too Many Requests</h3></div></div></div><p>
+There is on
+
+</p></div></div><div class="section" title="Top-level Harvesting"><div class="titlepage"><div><div><h2 class="title" style="clear: both"><a id="idp140333359083952"></a>Top-level Harvesting</h2></div></div></div><p>
+Now that we have our <i xmlns:r="http://www.r-project.org" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns:py="http://www.python.org" xmlns:perl="http://www.perl.org" xmlns:c="http://www.C.org" xmlns:vb="http://www.visualbasic.com" xmlns:omegahat="http://www.omegahat.org" xmlns:bioc="http://www.bioconductor.org" xmlns:java="http://www.java.com" xmlns:sql="http://www.sql.org" xmlns="" class="rfunc">searchTwitter()
+</i> function working,
+we can harvest the tweets for all of our twitter logins.
+Basically, we loop over the ids and call <i xmlns:r="http://www.r-project.org" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns:py="http://www.python.org" xmlns:perl="http://www.perl.org" xmlns:c="http://www.C.org" xmlns:vb="http://www.visualbasic.com" xmlns:omegahat="http://www.omegahat.org" xmlns:bioc="http://www.bioconductor.org" xmlns:java="http://www.java.com" xmlns:sql="http://www.sql.org" xmlns="" class="rfunc">searchTwitter()
+</i>
+for each.  Then we repeat this indefinitely.
+So the basic structure of the harvesting code is 
+</p><div xmlns="" class="codeToggle"><div class="unhidden" id="idp140333359085952"><div><pre class="rcode" title="R code">
+while(TRUE) {
+  for(id in logins) {
+       o = searchTwitter(id)
+       save(o, file = getFileName(id))
+  }
+}
+</pre></div></div></div>
+<div xmlns="" class="clearFloat"></div>
+<p>
+We save the results for each call to <i xmlns:r="http://www.r-project.org" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns:py="http://www.python.org" xmlns:perl="http://www.perl.org" xmlns:c="http://www.C.org" xmlns:vb="http://www.visualbasic.com" xmlns:omegahat="http://www.omegahat.org" xmlns:bioc="http://www.bioconductor.org" xmlns:java="http://www.java.com" xmlns:sql="http://www.sql.org" xmlns="" class="rfunc">searchTwitter()
+</i> to a file.
+We can put these in a separate directory for each value of <b xmlns="" class="$" title="">id</b>
+and we can use names such as  1.rda, 2.rda, etc.  We can use any 
+naming scheming by defining the <i xmlns:r="http://www.r-project.org" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns:py="http://www.python.org" xmlns:perl="http://www.perl.org" xmlns:c="http://www.C.org" xmlns:vb="http://www.visualbasic.com" xmlns:omegahat="http://www.omegahat.org" xmlns:bioc="http://www.bioconductor.org" xmlns:java="http://www.java.com" xmlns:sql="http://www.sql.org" xmlns="" class="rfunc">getFileName()
+</i>  function.
+</p><p>
+There is one important aspect to this harvesting that we must add.
+For a given value of <b xmlns="" class="$" title="">id</b>, we will make multiple
+calls to <i xmlns:r="http://www.r-project.org" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns:py="http://www.python.org" xmlns:perl="http://www.perl.org" xmlns:c="http://www.C.org" xmlns:vb="http://www.visualbasic.com" xmlns:omegahat="http://www.omegahat.org" xmlns:bioc="http://www.bioconductor.org" xmlns:java="http://www.java.com" xmlns:sql="http://www.sql.org" xmlns="" class="rfunc">searchTwitter()
+</i>. We do not want all of the tweets
+again  for that account. Instead, we want only the tweets since the previous
+query for that <b xmlns="" class="$" title="">id</b>. Twitter's API allows us to specify this
+via the  <i xmlns="" class="rarg">since_id</i> parameter. 
+When we obtain the tweets for a query, we calculate the largest identifier for this set of tweets
+and store it in a vector named <b xmlns="" class="$" title="">since_ids</b>.  We use <b xmlns="" class="$" title="">id</b> as the element
+name for this value. 
+In the next iteration of our <b xmlns="" class="rkeyword">while</b> loop, we retrieve this tweet id
+and pass it to <i xmlns:r="http://www.r-project.org" xmlns:s="http://cm.bell-labs.com/stat/S4" xmlns:py="http://www.python.org" xmlns:perl="http://www.perl.org" xmlns:c="http://www.C.org" xmlns:vb="http://www.visualbasic.com" xmlns:omegahat="http://www.omegahat.org" xmlns:bioc="http://www.bioconductor.org" xmlns:java="http://www.java.com" xmlns:sql="http://www.sql.org" xmlns="" class="rfunc">searchTwitter()
+</i> via the <i xmlns="" class="rarg">since_id</i> parameter.
+</p><p>
+To make it easy to interrupt our harvesting and start again, we will also store the
+vector of <b xmlns="" class="$" title="">search_ids</b> at the end of each iteration of the <b xmlns="" class="rkeyword">while</b>
+loop.
+</p></div></div></body></html>

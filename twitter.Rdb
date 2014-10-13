@@ -1,0 +1,320 @@
+<article xmlns:r="http://www.r-project.org"
+         xmlns:xi="http://www.w3.org/2003/XInclude"
+	 xmlns:c="http://www.C.org"
+	 xmlns:omg="http://www.omegahat.org">
+
+<articleinfo>
+
+<title>Searching for Tweets via the Twitter API using <r/></title>
+
+<author><firstname>Duncan</firstname><surname>Temple Lang</surname>
+  <affiliation><orgname>University of California at Davis</orgname>
+               <orgdiv>Department of Statistics</orgdiv>
+  </affiliation>
+</author>
+</articleinfo>
+
+<section>
+<title>Functional Summary</title>
+
+<para>
+Here are the basic instructions to get this going.
+</para>
+
+<para>
+Install the <r:pkg>RCurl</r:pkg> and <r:pkg>RJSONIO</r:pkg> packages.
+</para>
+
+<para>
+Create a file named twitterCreds.R.
+This should have the contents
+<programlisting><![CDATA[
+twitterKey = "...."
+twitterSecret = "...."
+]]></programlisting>
+This file should not be readable by anybody on the machine except your account.
+</para>
+
+<para>
+Create a directory named Data.
+</para>
+<para>
+Run the code in harvest.R
+<r:code>
+source("harvest.R")
+</r:code>
+
+</para>
+</section>
+
+
+<section>
+<title>High-level Overview</title>
+
+<para>
+We want to search for tweets on a regular basis that contains a particular term (in this case, a twitter handle/login).
+The basic idea is quite simple.
+We use the Twitter API search/tweets (<ulink url="https://api.twitter.com/1.1/search/tweets.json"/>) for this.
+There are several  aspects to consider - authentication and rate-limiting.
+These are somewhat related.
+</para>
+<para>
+Twitter allows us to use OAuth1.1 and also Application-only OAuth2.
+OAuth1.1 is fine for accessing resources belonging to a twitter account, e.g., 
+tweeting, accessing the list of followers.
+Application-only authentication works better for our purposes as
+we are querying public resources, not those of a particular login/account.
+Application-only authentication has higher rate-limits, i.e. the number
+of requests we can issue in a given time period.
+For the search/tweets method, this is 450 rather than 180 every 15 minutes.
+</para>
+
+
+<para>
+In addition to the higher rate-limit, OAuth2 is significantly simpler
+than OAuth1.1. Specifically, we don't have sign each request and manipulate the list
+of arguments to the request. 
+</para>
+</section>
+
+<section>
+<title>Authentication</title>
+
+<para>
+We'll use Application-only OAuth2 for the reasons we mentioned above.
+(Note that we also implemented OAuth1.1 in twitterFuns.R.)
+See <ulink url="https://dev.twitter.com/oauth/application-only"/> for a brief
+description of Application-only authentication on Twitter.
+There are two basic steps, as described there and in the OAuth2 specification:
+<ol>
+<li>Use our consumer key and secret to get a Bearer token via a POST request to <ulink url="https://api.twitter.com/oauth2/token"/>.
+</li>
+<li>
+Use this bearer token to make requests to the URL of the method we want, e.g.
+search/tweets.
+</li>
+</ol>
+There are details for each of these.
+</para>
+
+<section>
+<title>Getting the Bearer Token</title>
+
+<para>
+To get the bearer token we will use in each API request, 
+we send a POST request to 
+<r:code>
+u = "https://api.twitter.com/oauth2/token"
+</r:code>
+The single parameter for the body of this request is
+<r:code>
+grant_type = "client_credentials"
+</r:code>
+Importantly, we pass the consumer key and secret in the header of the HTTP request.
+We do this as the string <literal>"Basic &lt;str&gt;"</literal> where <literal>str</literal>
+is the base64-encoded version of the string <literal>"&lt;key&gt;:&lt;secret&gt;"</literal>.
+So we can create the basic authorization string with
+<r:code>
+auth  = sprintf("%s:%s", twitterKey, twitterSecret)
+</r:code>
+where the variables <r:var>twitterKey</r:var> and <r:var>twitterSecret</r:var>
+are strings containing our consumer key and secret.
+</para>
+<para>
+We can now  make the request to get the bearer token with
+<r:code>
+library(RCurl)
+ans = postForm(u, grant_type = "client_credentials", style = "POST",
+               .opts = list('useragent' = 'R Twitter App',
+                             httpheader = c(Authorization = sprintf("Basic %s", base64Encode(auth)))))
+</r:code>
+Note that the key and secret  are hidden from everyone because of <https/> (not base64-encoding).
+</para>
+<para>
+We can get the bearer token from this <json/> content with
+<r:code>
+library(RJSONIO)
+bearerToken = fromJSON(ans)["access_token"]
+</r:code>
+We can now use this in our requests.
+We should also note that until we invalidate/revoke this, it will be a valid
+token. So we can save it to a file and reuse it in different <r/> sessions.
+Note that it should be securely stored as it is like a password
+and so not to be shared with others. (Same as the consumer key and secret.)
+</para>
+</section>
+
+</section>
+
+<section>
+<title>Using the Bearer Token</title>
+
+<para>
+To use the bearer token, we include it in the
+<https/> header of our request to the actual URL of the method we want to call.
+Since we will have to do this for each request and this part of the <http/>header will be the same
+for each, we'll create a curl handle object and add this <http/> header once:
+<r:code>
+con = getCurlHandle(httpheader = c(Authorization = sprintf("Bearer %s", bearerToken)))
+</r:code>
+</para>
+<para>
+To call the search/tweets API method,  we use
+<r:code>
+searchURL = "https://api.twitter.com/1.1/search/tweets.json"
+tt = getForm(searchURL, q = "@RepMarthaRoby", curl = con)
+</r:code>
+If we enabled the <r:arg>verbose</r:arg> option in the curl handle, we would see
+something like
+<r:output><![CDATA[
+GET /1.1/search/tweets.json?q=%40RepMarthaRoby HTTP/1.1
+Host: api.twitter.com
+Accept: */*
+Authorization: Bearer AAA....3Rn6nsx
+]]></r:output>
+This includes the bearer token in the Authorization header field.
+</para>
+<para>
+The result of the <r:func>getForm</r:func> is <json/> content and we can get the tweets
+using 
+<r:code>
+tweets = fromJSON(tt)
+</r:code>
+This actually contains the list of tweets as one element and 
+metadata about the query in another:
+<r:code>
+names(tweets)
+<r:output><![CDATA[
+[1] "statuses"        "search_metadata"
+]]></r:output>
+</r:code>
+We'll see that the <r:el>search_metdata</r:el> is important.
+</para>
+
+<para>
+We can add additional parameters to our <r:func>getForm</r:func> query.
+The point here was to illustrate the use of the bearer token.
+</para>
+</section>
+
+<section>
+<title>Checking the Rate-Limit</title>
+
+<para>
+Now that we have the bearer token, we can query the current status of our rate-limits
+at any moment in time. 
+We do this by calling the API method application/rate_limit_status, e.g.,
+<r:code>
+zz = getForm("https://api.twitter.com/1.1/application/rate_limit_status.json", resources = "search", curl = con)
+rl = fromJSON(zz)
+<r:output><![CDATA[
+$rate_limit_context
+                application 
+"1EIti...............adlKi" 
+
+$resources
+$resources$search
+$resources$search$`/search/tweets`
+     limit  remaining      reset 
+       450        449 1413226593 
+]]></r:output>
+</r:code>
+If we omit the <r:arg>resources</r:arg> parameter, we get the rate-limits for all services.
+Alternatively, we can provide a comma-separated list of the services for which we want the limits.
+</para>
+</section>
+
+<section>
+<title>Getting All the Tweets from a Search</title>
+
+<para>
+Like many APIs, when we make a request, we get back the n (e.g. 100)
+results.  If there are more than n, we have to return to get the next
+set of n, and so on.  This can be problematic in a fast-moving data
+source such as Twitter.  When we return, we have to make certain to
+get the next set in our result set, not new tweets and not any of the
+same ones from the previous set.  There is a reasonable description of
+cursoring at <ulink
+url="https://dev.twitter.com/rest/public/timelines"/>.  Basically, we
+can ask for at most <r:expr eval="false">count = 100</r:expr> results
+in any single "chunk" returned by a query. Suppose there are actually
+250 tweets matching this query.  We get back the first 100 in our
+initial request. Each of these tweets has an identifier (id).  More
+recent tweets have higher id values.  When we return for the second
+set of 100 tweets in our result set, we specify the
+<r:arg>max_id</r:arg> parameter for our request and specify the
+smallest id value we have seen so far in this result set.  We can
+calculate this ourselves, or we can fetch it from the
+<r:el>search_metadata</r:el> field returned in each request, along
+with the list of tweets.  When we specify this, Twitter knows not to
+return any tweets with an id higher than this.  Hence, we don't get
+any of the tweets from the previous queries.
+</para>
+
+<para>
+Given the description above,  our function
+to search for tweets needs to make potentially several queries -
+an initial query for the first 100 and then continues
+to make further requests specifying the <r:arg>max_id</r:arg> 
+parameter to limit this request to the next 100 (or less) tweets in this result set.
+This is implemented in <ulink url="twitterFuns2.R"/>.
+</para>
+
+
+<section>
+<title>Handling Too Many Requests</title>
+
+<para>
+There is on
+
+</para>
+</section>
+
+</section>
+
+
+<section>
+<title>Top-level Harvesting</title>
+
+<para>
+Now that we have our <r:func>searchTwitter</r:func> function working,
+we can harvest the tweets for all of our twitter logins.
+Basically, we loop over the ids and call <r:func>searchTwitter</r:func>
+for each.  Then we repeat this indefinitely.
+So the basic structure of the harvesting code is 
+<r:code>
+while(TRUE) {
+  for(id in logins) {
+       o = searchTwitter(id)
+       save(o, file = getFileName(id))
+  }
+}
+</r:code>
+We save the results for each call to <r:func>searchTwitter</r:func> to a file.
+We can put these in a separate directory for each value of <r:var>id</r:var>
+and we can use names such as  1.rda, 2.rda, etc.  We can use any 
+naming scheming by defining the <r:func>getFileName</r:func>  function.
+</para>
+<para>
+There is one important aspect to this harvesting that we must add.
+For a given value of <r:var>id</r:var>, we will make multiple
+calls to <r:func>searchTwitter</r:func>. We do not want all of the tweets
+again  for that account. Instead, we want only the tweets since the previous
+query for that <r:var>id</r:var>. Twitter's API allows us to specify this
+via the  <r:arg>since_id</r:arg> parameter. 
+When we obtain the tweets for a query, we calculate the largest identifier for this set of tweets
+and store it in a vector named <r:var>since_ids</r:var>.  We use <r:var>id</r:var> as the element
+name for this value. 
+In the next iteration of our <r:keyword>while</r:keyword> loop, we retrieve this tweet id
+and pass it to <r:func>searchTwitter</r:func> via the <r:arg>since_id</r:arg> parameter.
+</para>
+<para>
+To make it easy to interrupt our harvesting and start again, we will also store the
+vector of <r:var>search_ids</r:var> at the end of each iteration of the <r:keyword>while</r:keyword>
+loop.
+</para>
+</section>
+
+
+
+</article>
